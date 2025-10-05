@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="theme-color" content="#0b1220">
+<meta property="og:title" content="Orbital Oasis — Live NASA-powered LEO Station">
+<meta property="og:description" content="Bio-regenerative station using DONKI & EONET data + CelesTrak TLEs.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://your-app.vercel.app/cover.png">
+<link rel="preconnect" href="https://api.nasa.gov">
+<link rel="preconnect" href="https://eonet.gsfc.nasa.gov">
+<link rel="preconnect" href="https://celestrak.org">
+
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Orbital Oasis — Winner Build + Marketplace & Tour</title>
+<style>
+  :root { --s1:4px; --s2:8px; --s3:12px; --s4:16px; }
+  html,body{margin:0;padding:0;overflow:hidden;background:#000;color:#fff;font-family:Inter,system-ui,Arial,sans-serif}
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@400;600&display=swap');
+  #simulation-canvas{position:fixed;inset:0;outline:0}
+  /* HUD (v6) */
+  .hud{position:fixed;inset:0;padding:var(--s4);pointer-events:none;opacity:0;transition:opacity .3s ease}
+  .hud-col{position:absolute;display:flex;flex-direction:column;gap:var(--s4);max-height:calc(100vh - 32px);overflow:auto}
+  .hud-top-left{top:var(--s4);left:var(--s4)}
+  .hud-top-right{top:var(--s4);right:var(--s4);align-items:flex-end}
+  .hud-bottom-left{bottom:var(--s4);left:var(--s4)}
+  .hud-bottom-right{bottom:var(--s4);right:var(--s4);align-items:flex-end;gap:var(--s2)}
+  .panel{width:300px;background:rgba(0,0,0,.55);backdrop-filter:blur(10px);border:1px solid rgba(103,232,249,.22);
+         border-radius:12px;box-shadow:0 0 20px rgba(103,232,249,.08);padding:var(--s3);font-size:.86rem}
+  .panel .title{font-family:Orbitron,system-ui,sans-serif;font-size:.92rem;margin:0 0 .7rem 0;color:#67e8f9;
+         border-bottom:1px solid rgba(103,232,249,.22);padding-bottom:.45rem}
+  .row{display:flex;justify-content:space-between;align-items:center;margin:.35rem 0}
+  .row span:first-child{color:#cbd5e1}
+  .row span:last-child{font-weight:600;color:#e0f2fe;font-family:Orbitron,system-ui,sans-serif}
+  .fin .row span:last-child{color:#4ade80 !important}
+  .row span.tag-live{color:#4ade80 !important}
+  .row span.tag-off{color:#f87171 !important}
+  .row span.tag-warn{color:#facc15 !important}
+  .bar-wrap{flex:1;background:rgba(0,0,0,.3);height:6px;border-radius:3px;margin:0 .75rem;overflow:hidden}
+  .bar{height:100%;width:0%;border-radius:3px;transition:width .5s ease}
+  #o2-bar{background:#0ea5e9} #bf-bar{background:#a3e635} #co2-bar{background:#f59e0b}
+  .status{margin-top:.35rem;color:#4ade80;font-family:Orbitron,system-ui,sans-serif;font-size:.85rem}
+  .weather{width:260px;background:rgba(234,179,8,.10);border-color:rgba(234,179,8,.30)}
+  .weather .title{color:#facc15;border-bottom-color:rgba(234,179,8,.30)}
+  .sources .title{color:#67e8f9}
+  /* Science process mini-viz */
+  #process{display:none;margin-top:.5rem;border-top:1px dashed rgba(103,232,249,.22);padding-top:.5rem;font-size:.8rem;color:#cbd5e1}
+  #process .flow{display:flex;align-items:center;gap:6px;opacity:.8}
+  #process .dot{width:6px;height:6px;border-radius:50%;background:#f59e0b;animation:dot 1.5s linear infinite}
+  #process .dot:nth-child(2){animation-delay:.25s} #process .dot:nth-child(3){animation-delay:.5s}
+  @keyframes dot{0%{transform:translateX(0)}100%{transform:translateX(48px)}}
+  /* Tooltip */
+  #tt{position:fixed;z-index:50;pointer-events:none;transform:translate(10px,10px);display:none;
+      background:rgba(0,0,0,.85);border:1px solid rgba(103,232,249,.5);padding:.5rem .7rem;border-radius:8px;font-size:.82rem;max-width:260px}
+  #tt .t{color:#67e8f9;font-family:Orbitron,sans-serif;margin-bottom:.2rem}
+  .icon-btn{pointer-events:all;background:rgba(0,0,0,.5);border:1px solid rgba(103,232,249,.22);color:#93c5fd;border-radius:12px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .icon-btn:hover{color:#67e8f9;border-color:#67e8f9}
+  #toast{position:fixed;left:50%;bottom:var(--s4);transform:translateX(-50%);z-index:1000;pointer-events:none}
+  .toast{background:rgba(10,25,47,.9);border:1px solid #facc15;border-radius:8px;color:#fde68a;padding:10px 12px;margin-top:8px}
+  /* Hero + Tour */
+  #hero{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;z-index:100;background:radial-gradient(ellipse at center, rgba(10,25,47,.9) 0%, rgba(0,0,0,.95) 100%);transition:opacity .3s ease; pointer-events:all}
+  #hero h1{font-family:Orbitron,sans-serif;color:#67e8f9;margin:0;font-size:42px;text-shadow:0 0 10px #67e8f9}
+  #hero p{color:#e0f2fe;max-width:620px;margin:0 12px 4px}
+  .cta{pointer-events:all;font-family:Orbitron;letter-spacing:.5px;font-size:16px;padding:10px 14px;border:2px solid #67e8f9;background:transparent;color:#67e8f9;border-radius:10px;cursor:pointer}
+  .tour-hl{box-shadow:0 0 0 2px #facc15, 0 0 18px #facc15 !important}
+  /* Target panel */
+  #target{display:none}
+  /* Priority sliders */
+  .priority{background:rgba(59,130,246,.10);border-color:rgba(59,130,246,.30)}
+  .priority .title{color:#93c5fd;border-bottom-color:rgba(59,130,246,.30)}
+  .slider{margin:.45rem 0}
+  .slider label{display:flex;justify-content:space-between;font-size:.75rem;color:#94a3b8;margin-bottom:.25rem}
+  .slider input[type=range]{width:100%;height:4px;background:rgba(59,130,246,.25);border-radius:2px;outline:none;-webkit-appearance:none;pointer-events:all}
+  .slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:#3b82f6;border-radius:50%;cursor:pointer}
+  .pill{pointer-events:all;padding:3px 8px;border-radius:999px;border:1px solid rgba(103,232,249,.35);background:rgba(2,132,199,.12);color:#93c5fd;font-size:.75rem;cursor:pointer;transition:.15s}
+  .pill:hover{border-color:#67e8f9;color:#67e8f9}
+  .tag-live{color:#4ade80} .tag-off{color:#f87171} .tag-warn{color:#facc15}
+  /* Overlays */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:none;z-index:120;pointer-events:all}
+  .sheet{position:absolute;right:0;top:0;height:100%;width:420px;background:rgba(10,25,47,.94);border-left:1px solid rgba(103,232,249,.25);padding:16px;display:flex;flex-direction:column}
+  .sheet .title{font-family:Orbitron;color:#67e8f9;margin:0 0 8px 0;border-bottom:1px solid rgba(103,232,249,.25);padding-bottom:6px}
+  .sheet .body{flex:1;overflow:auto;font-size:.88rem}
+  .sheet .close{position:absolute;top:10px;right:10px;border:1px solid rgba(103,232,249,.35);background:transparent;color:#93c5fd;border-radius:8px;padding:4px 6px;cursor:pointer}
+  /* Marketplace content */
+  .tbl{width:100%;border-collapse:collapse;font-size:.9rem}
+  .tbl th,.tbl td{padding:8px;border-bottom:1px solid rgba(103,232,249,.15);text-align:left}
+  .tbl th{color:#93c5fd;font-family:Orbitron}
+  .btn{pointer-events:all;background:transparent;color:#4ade80;border:1px solid #4ade80;border-radius:8px;padding:6px 10px;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:not-allowed;border-color:#6b7280;color:#9ca3af}
+  /* Reactor glow pulse */
+  .glow{ box-shadow:0 0 18px rgba(103,232,249,.8); border-color:#67e8f9 !important; color:#67e8f9 !important; }
+</style>
+</head>
+<body>
+  <!-- Hero -->
+  <div id="hero">
+    <h1>ORBITAL OASIS</h1>
+    <p>Bio-regenerative LEO station using <b>live NASA data</b> (DONKI &amp; EONET) and CelesTrak TLEs. Click a debris object to target it; dock visitors to offload CO₂; recycle or de-orbit responsibly.</p>
+    <div style="display:flex;gap:12px">
+      <button id="start" class="cta">Initiate Simulation</button>
+      <button id="startTour" class="cta">Start Guided Tour</button>
+    </div>
+  </div>
+
+  <canvas id="simulation-canvas"></canvas>
+
+  <!-- Tooltip -->
+  <div id="tt"><div class="t" id="tt-title"></div><div id="tt-body"></div></div>
+
+  <!-- HUD -->
+  <div class="hud">
+    <div class="hud-col hud-top-left">
+      <div class="panel fin">
+        <div class="title">ORBITAL OASIS</div>
+        <div id="md">MISSION DAY: 1</div>
+        <div id="stat" class="status">SYSTEM NOMINAL</div>
+      </div>
+
+      <div class="panel" id="resources-panel">
+        <div class="title">STATION RESOURCES</div>
+        <div class="row"><span>O₂</span><div class="bar-wrap"><div id="o2-bar" class="bar"></div></div><span id="o2-t">0%</span></div>
+        <div class="row"><span>Biofuel</span><div class="bar-wrap"><div id="bf-bar" class="bar"></div></div><span id="bf-t">0%</span></div>
+        <div class="row" id="co2-row"><span>CO₂</span><div class="bar-wrap"><div id="co2-bar" class="bar"></div></div><span id="co2-t">0 kg</span></div>
+        <div class="row"><span>Aluminum</span><span id="al-t">0 kg</span></div>
+        <div class="row"><span>Titanium</span><span id="ti-t">0 kg</span></div>
+        <!-- Science mini-visualization -->
+        <div id="process">
+          <div class="flow" title="Photosynthesis + Sabatier: CO₂ + H₂ → CH₄ + H₂O; H₂O → O₂ + H₂ (electrolysis)">
+            CO₂
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            → O₂ + CH₄
+          </div>
+          <div style="opacity:.7;margin-top:6px">Bioreactor converts visitor CO₂ into breathable oxygen and methane biofuel.</div>
+        </div>
+      </div>
+
+      <div class="panel priority" id="priority-panel">
+        <div class="title">PRIORITY SCORING</div>
+        <div class="slider"><label><span>α (Risk)</span><span id="a-val">0.45</span></label><input id="a" type="range" min="0" max="1" step="0.05" value="0.45"></div>
+        <div class="slider"><label><span>β (Value)</span><span id="b-val">0.35</span></label><input id="b" type="range" min="0" max="1" step="0.05" value="0.35"></div>
+        <div class="slider"><label><span>γ (Cost)</span><span id="g-val">0.20</span></label><input id="g" type="range" min="0" max="1" step="0.05" value="0.20"></div>
+        <div style="font-size:.72rem;color:#94a3b8;margin-top:.25rem">Score = 100 · (αR + βV − γC)</div>
+      </div>
+    </div>
+
+    <div class="hud-col hud-top-right">
+      <div class="panel" id="finance-panel">
+        <div class="title">FINANCIAL DASHBOARD</div>
+        <div class="row"><span>Total Revenue</span><span id="rev">$0</span></div>
+        <div class="row"><span>O₂ Value</span><span id="v-o2">$0</span></div>
+        <div class="row"><span>Biofuel Value</span><span id="v-bf">$0</span></div>
+        <div class="row"><span>Materials Value</span><span id="v-mat">$0</span></div>
+      </div>
+
+      <div class="panel weather" id="weather-card">
+        <div class="title">SPACE WEATHER (NASA)</div>
+        <div class="row"><span>Kp Index</span><span id="kp">--</span></div>
+        <div class="row"><span>Last Flare</span><span id="flare">--</span></div>
+        <div class="row"><span>Risk Factor</span><span id="wrisk">+0.0</span></div>
+        <div class="row"><span>Status</span><span id="wstat" class="tag-off">Offline</span></div>
+      </div>
+
+      <div class="panel sources" id="sources-panel">
+        <div class="title">DATA SOURCES</div>
+        <div class="row"><span>TLEs</span><span id="src-tle" class="tag-warn">Fallback</span></div>
+        <div class="row"><span>Space Weather</span><span id="src-w" class="tag-off">Offline</span></div>
+        <div class="row"><span>Events</span><span id="src-e" class="tag-off">Offline</span></div>
+        <div class="row"><span>Updated</span><span id="updated">--</span></div>
+        <div class="row" style="gap:6px;justify-content:flex-end">
+          <button class="pill" id="use-celestrak" title="Use CelesTrak">Use CelesTrak</button>
+          <button class="pill" id="use-fallback" title="Use Fallback">Use Fallback</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-col hud-bottom-left">
+      <div class="panel" id="target" style="display:none">
+        <div class="title" id="tgt-title">TARGET: --</div>
+        <div class="row"><span>NORAD</span><span id="tgt-norad">--</span></div>
+        <div class="row"><span>Altitude</span><span id="tgt-alt">-- km</span></div>
+        <div class="row"><span>Velocity</span><span id="tgt-vel">-- km/s</span></div>
+        <div class="row"><span>Priority</span><span id="tgt-score">--</span></div>
+        <div class="row" style="gap:6px;justify-content:flex-end;margin-top:.5rem">
+          <button class="pill" id="btn-recycle">RECYCLE</button>
+          <button class="pill" id="btn-deorbit">DEORBIT</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-col hud-bottom-right">
+      <button class="icon-btn" id="open-log" title="Missions & Events">📋</button>
+      <button class="icon-btn" id="dock" title="Dock & Offload CO₂">🛰️</button>
+      <button class="icon-btn" id="market" title="Logistics & Marketplace">🛒</button>
+      <button class="icon-btn" id="about" title="About">ℹ️</button>
+    </div>
+  </div>
+
+  <!-- Overlays -->
+  <div class="overlay" id="log-overlay">
+    <div class="sheet">
+      <button class="close" id="log-close">✕</button>
+      <h3 class="title">EVENT LOG</h3>
+      <div class="body" id="log-list"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="market-overlay">
+    <div class="sheet">
+      <button class="close" id="market-close">✕</button>
+      <h3 class="title">LOGISTICS & MARKETPLACE</h3>
+      <div class="body">
+        <table class="tbl">
+          <thead><tr><th>Commodity</th><th>Qty</th><th>Price</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>O₂</td><td id="m-q-o2">0</td><td id="m-p-o2">$0</td>
+                <td><button class="btn" id="sell-o2">Sell All</button></td></tr>
+            <tr><td>Biofuel (CH₄)</td><td id="m-q-bf">0</td><td id="m-p-bf">$0</td>
+                <td><button class="btn" id="sell-bf">Sell All</button></td></tr>
+            <tr><td>Aluminum</td><td id="m-q-al">0</td><td id="m-p-al">$0</td>
+                <td><button class="btn" id="xfer-al">Transfer to Foundry</button></td></tr>
+            <tr><td>Titanium</td><td id="m-q-ti">0</td><td id="m-p-ti">$0</td>
+                <td><button class="btn" id="xfer-ti">Transfer to Foundry</button></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:12px;border-top:1px solid rgba(103,232,249,.15);padding-top:10px">
+          <button class="btn" id="refuel-btn" disabled>Refuel Visitor (+$25,000)</button>
+          <div style="opacity:.75;margin-top:6px">Requires ≥ 120 units of Biofuel and a visiting spacecraft recently serviced.</div>
+        </div>
+        <div style="opacity:.7;margin-top:10px">Prices jitter slowly and O₂ tracks EONET emergencies (wildfires/storms/volcanoes) with a temporary uplift.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="about-overlay">
+    <div class="sheet">
+      <button class="close" id="about-close">✕</button>
+      <h3 class="title">ABOUT & CREDITS</h3>
+      <div class="body">
+        <p><b>Orbital Oasis</b> — a bio-regenerative service station in LEO.</p>
+        <ul>
+          <li>NASA DONKI (Geomagnetic storms & Solar flares)</li>
+          <li>NASA EONET (Open natural events)</li>
+          <li>CelesTrak (TLEs for debris groups)</li>
+        </ul>
+        <p>Fallback datasets are bundled for offline demos.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script type="importmap">
+    {"imports":{
+      "three":"https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js",
+      "OrbitControls":"https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js",
+      "satellite-js":"https://cdn.jsdelivr.net/npm/satellite.js@4.1.3/dist/satellite.es.js"
+    }}
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'OrbitControls';
+    import * as satellite from 'satellite-js';
+
+    const NASA_API_KEY = "dOnyRovbwULP4HaEUaGC2MvcLVMcNGrui1nzeXEL";
+    const DONKI_BASE = "https://api.nasa.gov/DONKI";
+    const EONET_URL = "https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=12";
+
+    // UI references
+    const hud = document.querySelector('.hud');
+    const md = document.getElementById('md');
+    const stat = document.getElementById('stat');
+
+    const o2bar = document.getElementById('o2-bar');
+    const bfbar = document.getElementById('bf-bar');
+    const co2bar = document.getElementById('co2-bar');
+    const o2t = document.getElementById('o2-t');
+    const bft = document.getElementById('bf-t');
+    const co2t = document.getElementById('co2-t');
+    const alt = document.getElementById('al-t');
+    const tit = document.getElementById('ti-t');
+
+    const rev = document.getElementById('rev');
+    const vO2 = document.getElementById('v-o2');
+    const vBF = document.getElementById('v-bf');
+    const vMAT = document.getElementById('v-mat');
+
+    const kp = document.getElementById('kp');
+    const flare = document.getElementById('flare');
+    const wrisk = document.getElementById('wrisk');
+    const wstat = document.getElementById('wstat');
+
+    const srcTLE = document.getElementById('src-tle');
+    const srcW = document.getElementById('src-w');
+    const srcE = document.getElementById('src-e');
+    const updated = document.getElementById('updated');
+
+    const startBtn = document.getElementById('start');
+    const startTourBtn = document.getElementById('startTour');
+    const hero = document.getElementById('hero');
+    const btnCeles = document.getElementById('use-celestrak');
+    const btnFallback = document.getElementById('use-fallback');
+    const btnDock = document.getElementById('dock');
+    const btnMarket = document.getElementById('market');
+
+    const tt = document.getElementById('tt');
+    const ttTitle = document.getElementById('tt-title');
+    const ttBody = document.getElementById('tt-body');
+
+    const tgtPanel = document.getElementById('target');
+    const tgtTitle = document.getElementById('tgt-title');
+    const tgtNorad = document.getElementById('tgt-norad');
+    const tgtAlt = document.getElementById('tgt-alt');
+    const tgtVel = document.getElementById('tgt-vel');
+    const tgtScore = document.getElementById('tgt-score');
+    const btnRecycle = document.getElementById('btn-recycle');
+    const btnDeorbit = document.getElementById('btn-deorbit');
+
+    const openLogBtn = document.getElementById('open-log');
+    const aboutBtn = document.getElementById('about');
+
+    const logOverlay = document.getElementById('log-overlay');
+    const logClose = document.getElementById('log-close');
+    const logList = document.getElementById('log-list');
+
+    const aboutOverlay = document.getElementById('about-overlay');
+    const aboutClose = document.getElementById('about-close');
+
+    const marketOverlay = document.getElementById('market-overlay');
+    const marketClose = document.getElementById('market-close');
+    const mQo2 = document.getElementById('m-q-o2');
+    const mQbf = document.getElementById('m-q-bf');
+    const mQal = document.getElementById('m-q-al');
+    const mQti = document.getElementById('m-q-ti');
+    const mPo2 = document.getElementById('m-p-o2');
+    const mPbf = document.getElementById('m-p-bf');
+    const mPal = document.getElementById('m-p-al');
+    const mPti = document.getElementById('m-p-ti');
+    const sellO2 = document.getElementById('sell-o2');
+    const sellBF = document.getElementById('sell-bf');
+    const xferAL = document.getElementById('xfer-al');
+    const xferTI = document.getElementById('xfer-ti');
+    const refuelBtn = document.getElementById('refuel-btn');
+
+    const processViz = document.getElementById('process');
+    const resourcesPanel = document.getElementById('resources-panel');
+
+    const toastBox = document.getElementById('toast');
+    function toast(msg){ const d=document.createElement('div'); d.className='toast'; d.textContent=msg; toastBox.appendChild(d); setTimeout(()=>d.remove(),4200); }
+    function logEvent(message, channel="MISSION CONTROL"){ const p=document.createElement('p'); p.innerHTML = `<b>[${channel}]</b> ${message}`; logList.prepend(p); }
+
+    // 3D scene basics
+    const canvas = document.getElementById('simulation-canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 50000);
+    camera.position.set(20, 15, 30);
+    const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.minDistance=15; controls.maxDistance=120;
+
+    scene.add(new THREE.AmbientLight(0x404040, .9));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(50,20,30); scene.add(sun);
+
+    // Earth
+    const loader = new THREE.TextureLoader();
+    const earthRadius = 6.371;
+    const earth = new THREE.Mesh(new THREE.SphereGeometry(earthRadius,64,64),
+      new THREE.MeshStandardMaterial({
+        map: loader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_2048.jpg'),
+        metalness:.1, roughness:.7
+      })
+    ); scene.add(earth);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(earthRadius+.25,64,64),
+      new THREE.ShaderMaterial({
+        vertexShader:'varying vec3 n;void main(){n=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+        fragmentShader:'varying vec3 n;void main(){float i=pow(.65-dot(n,vec3(0,0,1.)),4.);gl_FragColor=vec4(.5,.7,1.,1.)*i;}',
+        side:THREE.BackSide,transparent:true,blending:THREE.AdditiveBlending})); earth.add(glow);
+
+    const starsGeom = new THREE.BufferGeometry();
+    starsGeom.setAttribute('position', new THREE.Float32BufferAttribute(Array.from({length:22000},()=>THREE.MathUtils.randFloatSpread(40000)),3));
+    scene.add(new THREE.Points(starsGeom, new THREE.PointsMaterial({size:2,color:0xffffff})));
+
+    // Station
+    const station = new THREE.Group(); station.scale.set(.1,.1,.1);
+    const core = new THREE.Mesh(new THREE.CylinderGeometry(2,2,8,8), new THREE.MeshStandardMaterial({color:0xbbbbdd,metalness:.8,roughness:.4}));
+    core.rotation.z = Math.PI/2; station.add(core);
+    const reactor = new THREE.Mesh(new THREE.SphereGeometry(4,32,32), new THREE.MeshStandardMaterial({color:0x00ff00, transparent:true, opacity:.22}));
+    reactor.position.x = -6; station.add(reactor);
+    const pMat = new THREE.MeshStandardMaterial({color:0x0a192f, metalness:.9, roughness:.12});
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(12,.2,4), pMat); p1.position.set(10,0,0);
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(12,.2,4), pMat); p2.position.set(0,0,-10); p2.rotation.y=Math.PI/2;
+    station.add(p1,p2);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,6,12), new THREE.MeshStandardMaterial({color:0xdddddd, metalness:.7, roughness:.4}));
+    mast.position.set(0,4,3); station.add(mast);
+    const dish = new THREE.Mesh(new THREE.SphereGeometry(1.2,24,24,0,Math.PI), new THREE.MeshStandardMaterial({color:0xcccccc, metalness:.85, roughness:.25}));
+    dish.scale.set(1,1,.5); dish.position.set(0,7,3); station.add(dish);
+    scene.add(station);
+
+    // State
+    const ECI_TO_SCENE = 0.0015;
+    const orbitRadius = earthRadius + 0.8;
+    const state = {
+      running:false, phase:'IDLE', time:0, day:1, target:null,
+      resources:{ o2:0, bf:0, co2:0, al:0, ti:0 },
+      storage:{ o2:1000, bf:500, co2:1000 },
+      // baseline prices (will fluctuate)
+      prices:{ o2:50, bf:100, al:150, ti:500 },
+      revenue:0,
+      weights:{ a:0.45, b:0.35, g:0.20 },
+      tleMode:'Fallback',
+      dockAvailable:false, justDocked:false, co2_pending:0,
+      marketTick:0
+    };
+
+    // Debris (fallback)
+    const fallbackTLEs = [
+      { name:"COSMOS 2251 DEBRIS", tle1:'1 39325U 93036B   23275.90000000  .00000167  00000-0  33333-4 0  9990', tle2:'2 39325  74.0354 118.4282 0011503 268.9163  90.9348 14.33600949386043' },
+      { name:"IRIDIUM 33 DEBRIS", tle1:'1 38771U 97051C   23275.90000000  .00000167  00000-0  33333-4 0  9990', tle2:'2 38771  86.3988 178.3888 0008535 248.1541 111.7925 14.34267384 66160' },
+      { name:"FENGYUN 1C DEBRIS", tle1:'1 32382U 99025A   23275.90000000  .00000167  00000-0  33333-4 0  9990', tle2:'2 32382  98.7060 178.5034 0011400 235.5330 124.4373 14.12009224724946' },
+      { name:"SL-16 R/B",          tle1:'1 23455U 94029A   23275.90000000  .00000167  00000-0  33333-4 0  9990', tle2:'2 23455  51.6443 242.2155 0006713 147.1134 213.0118 15.49446452248431' },
+      { name:"NOAA 16 DEBRIS",     tle1:'1 26536U 00055A   23275.90000000  .00000167  00000-0  33333-4 0  9990', tle2:'2 26536  98.7490 159.3512 0011218 205.1585 154.9123 14.12484469116724' },
+    ];
+    const debrisGroup = new THREE.Group(); scene.add(debrisGroup);
+
+    function addTLEObject(rec){
+      try{
+        const satrec = satellite.twoline2satrec(rec.tle1, rec.tle2);
+        const geos = [ new THREE.DodecahedronGeometry(.26,0), new THREE.BoxGeometry(.22,.32,.42), new THREE.CylinderGeometry(.10,.16,.5,10) ];
+        const geo = geos[Math.floor(Math.random()*geos.length)];
+        const mat = new THREE.MeshPhysicalMaterial({ color:new THREE.Color().setHSL(0,0,Math.random()*0.4+0.45), metalness:.95, roughness:.2+Math.random()*.25, clearcoat:.6, clearcoatRoughness:.25 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+        mesh.name = rec.name;
+        mesh.userData = { satrec, norad:(rec.tle2.match(/^2\s+(\d+)/)||['','—'])[1], al:Math.floor(Math.random()*20)+10, ti:Math.floor(Math.random()*10)+5 };
+        debrisGroup.add(mesh);
+      }catch(e){ console.warn('TLE add failed', e); }
+    }
+    fallbackTLEs.forEach(addTLEObject);
+
+    // Data fetches
+    async function useCelesTrak(){
+      try{
+        const urls = [
+          "https://celestrak.org/NORAD/elements/gp.php?GROUP=cosmos-2251-debris&FORMAT=TLE",
+          "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-33-debris&FORMAT=TLE"
+        ];
+        const texts = await Promise.all(urls.map(u=>fetch(u,{cache:'no-store'}).then(r=>r.text())));
+        const lines = texts.join("\n").trim().split(/\r?\n/);
+        const recs = [];
+        for(let i=0;i<lines.length;i+=3){
+          if(!lines[i+1]||!lines[i+2]) break;
+          recs.push({ name: lines[i].trim(), tle1: lines[i+1].trim(), tle2: lines[i+2].trim() });
+        }
+        if(recs.length){
+          debrisGroup.clear(); recs.slice(0,120).forEach(addTLEObject);
+          markLive(srcTLE,'Live'); state.tleMode='Live';
+          toast('CelesTrak: Live TLEs loaded'); logEvent('TLE source set to Live (CelesTrak).','DATA');
+        }else{ throw new Error('No TLEs parsed'); }
+      }catch(err){
+        console.warn(err); toast('CelesTrak fetch failed. Using fallback.'); state.tleMode='Fallback';
+        markWarn(srcTLE,'Fallback'); if(debrisGroup.children.length===0) fallbackTLEs.forEach(addTLEObject);
+        logEvent('TLE source fallback used due to fetch error.','DATA');
+      }
+      updated.textContent = new Date().toISOString().slice(0,10);
+    }
+
+    async function fetchDONKI(){
+      try{
+        const end = new Date(); const start = new Date(end.getTime()-3*864e5);
+        const s = start.toISOString().slice(0,10); const e = end.toISOString().slice(0,10);
+        const gst = await fetch(`${DONKI_BASE}/GST?startDate=${s}&endDate=${e}&api_key=${NASA_API_KEY}`,{cache:'no-store'}).then(r=>r.json());
+        const kpVals = Array.isArray(gst) ? gst.flatMap(g => (g.kpIndex||g.allKpIndex||[])).map(x => Number(x.kpIndex ?? x) ).filter(n => !Number.isNaN(n)) : [];
+        const kpNow = kpVals.length ? Math.max(...kpVals) : 2;
+        kp.textContent = String(kpNow);
+        const flr = await fetch(`${DONKI_BASE}/FLR?startDate=${s}&endDate=${e}&api_key=${NASA_API_KEY}`,{cache:'no-store'}).then(r=>r.json());
+        const lastClass = Array.isArray(flr)&&flr.length ? (flr[flr.length-1].classType || '—') : '—';
+        flare.textContent = lastClass;
+        let rf = 0; if(kpNow>=6) rf += .2; if(/^M/i.test(lastClass)) rf += .1; if(/^X/i.test(lastClass)) rf += .25;
+        rf = Math.min(1, rf); wrisk.textContent = `+${rf.toFixed(2)}`;
+        markLive(srcW,'Live'); wstat.textContent='Live'; wstat.classList.remove('tag-off'); wstat.classList.add('tag-live');
+        logEvent(`Kp=${kpNow}, Last Flare=${lastClass}. Risk factor set to +${rf.toFixed(2)}.`,'DONKI ALERT');
+      }catch(e){
+        console.warn('DONKI failed', e); wstat.textContent='Offline'; wstat.classList.remove('tag-live'); wstat.classList.add('tag-off'); markOff(srcW,'Offline');
+        logEvent('Space Weather offline (DONKI error).','DONKI ALERT');
+      }
+      updated.textContent = new Date().toISOString().slice(0,10);
+    }
+
+    let eventsBoost = 0;
+    async function fetchEONET(){
+      try{
+        const data = await fetch(EONET_URL,{cache:'no-store'}).then(r=>r.json());
+        if(data && Array.isArray(data.events)){
+          const count = data.events.length;
+          markLive(srcE, `Live ✓ (${count})`);
+          const cats = (ev)=> (ev.categories||[]).map(c=>c.title||c.id||'').join('|').toLowerCase();
+          let urgent = 0;
+          for(const ev of data.events){ const s = cats(ev); if(s.includes('wildfire')||s.includes('storm')||s.includes('volcano')) urgent++; }
+          eventsBoost = Math.min(0.4, urgent*0.05);
+          logEvent(`EONET live: ${count} open events; urgent=${urgent}. O₂ price uplift +${Math.round(eventsBoost*100)}%.`,'EONET ALERT');
+        } else { markOff(srcE,'Offline'); logEvent('EONET: unexpected response.','EONET ALERT'); }
+      }catch(e){
+        console.warn('EONET failed', e); markOff(srcE,'Offline'); logEvent('EONET offline or blocked.','EONET ALERT');
+      }
+      updated.textContent = new Date().toISOString().slice(0,10);
+    }
+
+    function markLive(el, text){ el.textContent=text||'Live'; el.classList.remove('tag-off','tag-warn'); el.classList.add('tag-live'); }
+    function markOff(el, text){ el.textContent=text||'Offline'; el.classList.remove('tag-live','tag-warn'); el.classList.add('tag-off'); }
+    function markWarn(el, text){ el.textContent=text||'Fallback'; el.classList.remove('tag-live','tag-off'); el.classList.add('tag-warn'); }
+
+    // Priority sliders
+    const sliders = { a:document.getElementById('a'), b:document.getElementById('b'), g:document.getElementById('g') };
+    const vals = { a:document.getElementById('a-val'), b:document.getElementById('b-val'), g:document.getElementById('g-val') };
+    Object.keys(sliders).forEach(k=>{ sliders[k].addEventListener('input',()=>{ vals[k].textContent = sliders[k].value; state.weights[k] = +sliders[k].value; }); });
+
+    // Ray/hover
+    const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2(); let hovered=null;
+    const clock = new THREE.Clock();
+
+    function riskFor(obj){
+      if(!obj) return 0;
+      const sPos = station.getWorldPosition(new THREE.Vector3());
+      const dPos = obj.getWorldPosition(new THREE.Vector3());
+      const dist = sPos.distanceTo(dPos);
+      let base = Math.max(0, 1 - dist/50);
+      const sw = parseFloat((wrisk.textContent||'0').replace('+',''))||0;
+      return Math.min(1, base + sw);
+    }
+    function valueFor(obj){
+      if(!obj) return 0;
+      const kg = (obj.userData.al||0)*1 + (obj.userData.ti||0)*1.2;
+      const need = 1 - (state.resources.o2/state.storage.o2);
+      let base = Math.min(1, (kg/50)*.6 + need*.4);
+      base = Math.min(1, base*(1+eventsBoost));
+      return base;
+    }
+    function costFor(obj){ if(!obj) return .3; return .2 + Math.random()*.4; }
+    function priorityScore(obj){
+      const R = riskFor(obj), V = valueFor(obj), C = costFor(obj);
+      const s = Math.max(0, Math.min(1, state.weights.a*R + state.weights.b*V - state.weights.g*C));
+      return Math.round(s*100);
+    }
+
+    // Animate
+    function animate(){
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      controls.update();
+      earth.rotation.y += 0.0005;
+      station.position.x = Math.cos(clock.getElapsedTime()*0.1)*orbitRadius;
+      station.position.z = Math.sin(clock.getElapsedTime()*0.1)*orbitRadius;
+      station.lookAt(earth.position);
+      debrisGroup.children.forEach(d=>{
+        const pv = satellite.propagate(d.userData.satrec, new Date());
+        if(pv && pv.position){ d.position.set(pv.position.x*ECI_TO_SCENE, pv.position.y*ECI_TO_SCENE, pv.position.z*ECI_TO_SCENE); }
+      });
+
+      // Hover tooltip
+      ray.setFromCamera(mouse, camera);
+      const hit = ray.intersectObjects(debrisGroup.children,false)[0]?.object||null;
+      if(hovered!==hit){ hovered = hit; }
+      if(hovered){
+        const w = hovered.getWorldPosition(new THREE.Vector3());
+        const v = w.clone().project(camera);
+        tt.style.left = ((v.x*.5+.5)*innerWidth)+'px';
+        tt.style.top  = ((-v.y*.5+.5)*innerHeight)+'px';
+        ttTitle.textContent = hovered.name;
+        let altStr='—'; try{ const pv=satellite.propagate(hovered.userData.satrec,new Date()); if(pv&&pv.position){ const gd=satellite.eciToGeodetic(pv.position,satellite.gstime(new Date())); altStr = `${gd.height.toFixed(1)} km`; } }catch{}
+        const s = priorityScore(hovered);
+        ttBody.innerHTML = `NORAD: ${hovered.userData.norad}<br/>Alt: ${altStr}<br/>Risk: ${s}/100<br/><span style="opacity:.7">Click to lock target</span>`;
+        tt.style.display='block';
+      } else tt.style.display='none';
+
+      if(state.running) update(dt);
+      renderer.render(scene, camera);
+    }
+
+    // Market & pricing
+    function updateMarketPrices(){
+      // slow jitter
+      state.marketTick++;
+      const jitter = (base)=> base * (1 + (Math.sin(state.marketTick/120)/100)); // ±1%
+      const uplift = 1 + eventsBoost; // O2 reacts to emergencies
+      state.prices.o2 = Math.max(20, Math.round(jitter(50) * uplift));
+      state.prices.bf = Math.max(60, Math.round(jitter(100)));
+      state.prices.al = Math.max(100, Math.round(jitter(150)));
+      state.prices.ti = Math.max(350, Math.round(jitter(500)));
+    }
+    function openMarketplace(){
+      refreshMarket();
+      marketOverlay.style.display='block';
+    }
+    function refreshMarket(){
+      updateMarketPrices();
+      mQo2.textContent = Math.floor(state.resources.o2);
+      mQbf.textContent = Math.floor(state.resources.bf);
+      mQal.textContent = Math.floor(state.resources.al);
+      mQti.textContent = Math.floor(state.resources.ti);
+      mPo2.textContent = '$'+state.prices.o2.toLocaleString();
+      mPbf.textContent = '$'+state.prices.bf.toLocaleString();
+      mPal.textContent = '$'+state.prices.al.toLocaleString();
+      mPti.textContent = '$'+state.prices.ti.toLocaleString();
+      sellO2.disabled = state.resources.o2 < 1;
+      sellBF.disabled = state.resources.bf < 1;
+      xferAL.disabled = state.resources.al < 1;
+      xferTI.disabled = state.resources.ti < 1;
+      refuelBtn.disabled = !(state.justDocked && state.resources.bf >= 120);
+    }
+    function sellAll(type){
+      const qty = Math.floor(state.resources[type]); if(qty<=0) return;
+      const price = state.prices[type==='o2'?'o2':type];
+      const value = qty * price;
+      state.resources[type]-= qty; state.revenue += value;
+      toast(`Sold ${qty} ${type.toUpperCase()} for $${value.toLocaleString()}`); logEvent(`Market: Sold ${qty} ${type.toUpperCase()} for $${value.toLocaleString()}.`,'MARKET');
+      updateBars(); updateValues(); refreshMarket();
+    }
+    function transferAll(type){
+      const qty = Math.floor(state.resources[type]); if(qty<=0) return;
+      const price = state.prices[type];
+      const value = qty * price;
+      state.resources[type] = 0; state.revenue += value;
+      toast(`Transferred ${qty} ${type.toUpperCase()} to Orbital Foundry (+$${value.toLocaleString()})`); logEvent(`Logistics: ${qty} ${type.toUpperCase()} → Orbital Foundry (+$${value.toLocaleString()}).`,'MARKET');
+      updateBars(); updateValues(); refreshMarket();
+    }
+
+    // Simulation update
+    function update(dt){
+      state.time += dt; state.day += dt/5; md.textContent = 'MISSION DAY: ' + Math.floor(state.day);
+
+      // visitor spawn
+      if(state.day>2 && !state.dockAvailable && Math.random()>0.996){ state.dockAvailable = true; btnDock.classList.add('glow'); toast('Visiting spacecraft available for docking'); logEvent('Visiting spacecraft ready to dock.','MISSION CONTROL'); }
+
+      // autopick target
+      if(state.time>7 && state.phase==='IDLE' && debrisGroup.children.length){ const next = debrisGroup.children.reduce((a,b)=> priorityScore(a) > priorityScore(b) ? a : b); setTarget(next); changePhase('CAPTURING'); }
+
+      if(state.phase==='CAPTURING' && state.time>6){ changePhase('PROCESSING'); }
+      else if(state.phase==='PROCESSING' && state.time>2){
+        if(state.target){
+          state.resources.al += state.target.userData.al;
+          state.resources.ti += state.target.userData.ti;
+          debrisGroup.remove(state.target);
+          logEvent(`Recycled ${state.target.name}: +${state.target.userData.al}kg Al, +${state.target.userData.ti}kg Ti`,'MISSION CONTROL');
+        }
+        updateValues(); changePhase('GENERATING');
+      } else if(state.phase==='GENERATING'){
+        const processRate = 20; const take = Math.min(state.co2_pending, processRate*dt);
+        state.co2_pending -= take;
+        state.resources.o2 = Math.min(state.storage.o2, state.resources.o2 + take*0.727);
+        state.resources.bf = Math.min(state.storage.bf, state.resources.bf + take*0.364);
+        state.resources.o2 = Math.min(state.storage.o2, state.resources.o2 + dt*10);
+        state.resources.bf = Math.min(state.storage.bf, state.resources.bf + dt*5);
+        processViz.style.display = 'block';
+        updateBars(); updateValues();
+        if(state.time>6 && state.co2_pending<=0){ processViz.style.display = 'none'; changePhase('IDLE'); }
+      }
+      // price heartbeat
+      if(Math.floor(state.time)%2===0) { updateMarketPrices(); updateValues(); }
+    }
+
+    function changePhase(p){ state.phase=p; state.time=0;
+      if(p==='CAPTURING'){ stat.textContent='CAPTURING'; stat.style.color='#facc15'; }
+      else if(p==='PROCESSING'){ stat.textContent='PROCESSING'; stat.style.color='#93c5fd'; }
+      else if(p==='GENERATING'){ stat.textContent='GENERATING'; stat.style.color='#4ade80'; }
+      else { stat.textContent='SYSTEM NOMINAL'; stat.style.color='#4ade80'; tgtPanel.style.display='none'; processViz.style.display='none'; }
+    }
+
+    function setTarget(obj){
+      state.target = obj; if(!obj) return;
+      tgtPanel.style.display='block';
+      tgtTitle.textContent = 'TARGET: ' + obj.name;
+      tgtNorad.textContent = obj.userData.norad;
+      const pv = satellite.propagate(obj.userData.satrec, new Date());
+      if(pv && pv.position && pv.velocity){
+        const gd = satellite.eciToGeodetic(pv.position, satellite.gstime(new Date()));
+        const v = pv.velocity; const sp = Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z);
+        tgtAlt.textContent = gd.height.toFixed(1)+' km';
+        tgtVel.textContent = sp.toFixed(2)+' km/s';
+      } else { tgtAlt.textContent='—'; tgtVel.textContent='—'; }
+      tgtScore.textContent = priorityScore(obj);
+      const salvage = (obj.userData.al||0)*state.prices.al + (obj.userData.ti||0)*state.prices.ti;
+      btnDeorbit.style.display = salvage < 5000 ? 'inline-block' : 'none';
+    }
+
+    function updateBars(){
+      const o2p = (state.resources.o2/state.storage.o2)*100;
+      const bfp = (state.resources.bf/state.storage.bf)*100;
+      const co2p = (state.resources.co2/state.storage.co2)*100;
+      o2bar.style.width = o2p+'%'; o2t.textContent = Math.floor(o2p)+'%';
+      bfbar.style.width = bfp+'%'; bft.textContent = Math.floor(bfp)+'%';
+      co2bar.style.width = Math.min(100,co2p)+'%'; co2t.textContent = Math.floor(state.resources.co2)+' kg';
+      alt.textContent = Math.floor(state.resources.al)+' kg';
+      tit.textContent = Math.floor(state.resources.ti)+' kg';
+      // marketplace mirror
+      if(marketOverlay.style.display==='block') refreshMarket();
+    }
+
+    function updateValues(){
+      // apply market prices to value calc
+      const o2Val = state.resources.o2 * state.prices.o2;
+      const bfVal = state.resources.bf * state.prices.bf;
+      const matVal = state.resources.al * state.prices.al + state.resources.ti * state.prices.ti;
+      vO2.textContent = '$'+Math.floor(o2Val).toLocaleString();
+      vBF.textContent = '$'+Math.floor(bfVal).toLocaleString();
+      vMAT.textContent = '$'+Math.floor(matVal).toLocaleString();
+      rev.textContent = '$'+Math.floor(state.revenue).toLocaleString();
+    }
+
+    // Actions
+    btnDock.addEventListener('click', ()=>{
+      if(!state.dockAvailable){ toast('No visiting spacecraft at the moment'); return; }
+      const offload = 100 + Math.random()*100;
+      state.co2_pending += offload; state.revenue += 15000; state.justDocked = true;
+      btnDock.classList.remove('glow'); state.dockAvailable=false;
+      updateBars(); updateValues();
+      toast('Docked: +'+offload.toFixed(0)+' kg CO₂, +$15,000'); logEvent(`Docked visitor: +${offload.toFixed(0)} kg CO₂ queued; service fee +$15,000.`,'MISSION CONTROL');
+      changePhase('GENERATING'); refreshMarket();
+    });
+
+    function processCurrentTarget(){
+      if(!state.target){ toast('Select a target on the globe first'); return; }
+      const t = state.target; const addAl=t.userData.al||0, addTi=t.userData.ti||0;
+      state.resources.al += addAl; state.resources.ti += addTi; debrisGroup.remove(t);
+      logEvent(`Recycled ${t.name}: +${addAl}kg Al, +${addTi}kg Ti`,'MISSION CONTROL');
+      updateBars(); updateValues(); state.target=null; tgtPanel.style.display='none'; changePhase('GENERATING');
+    }
+    btnRecycle.addEventListener('click', processCurrentTarget);
+    btnDeorbit.addEventListener('click', ()=>{ if(!state.target) return; debrisGroup.remove(state.target); toast('Target safely de-orbited'); logEvent(`De-orbited ${state.target.name}.`,'MISSION CONTROL'); changePhase('IDLE'); });
+
+    openLogBtn.addEventListener('click', ()=>{ logOverlay.style.display='block'; });
+    logClose.addEventListener('click', ()=>{ logOverlay.style.display='none'; });
+    aboutBtn.addEventListener('click', ()=>{ aboutOverlay.style.display='block'; });
+    aboutClose.addEventListener('click', ()=>{ aboutOverlay.style.display='none'; });
+    btnMarket.addEventListener('click', ()=>{ openMarketplace(); });
+    marketClose.addEventListener('click', ()=>{ marketOverlay.style.display='none'; });
+
+    // Market buttons
+    sellO2.addEventListener('click', ()=>sellAll('o2'));
+    sellBF.addEventListener('click', ()=>sellAll('bf'));
+    xferAL.addEventListener('click', ()=>transferAll('al'));
+    xferTI.addEventListener('click', ()=>transferAll('ti'));
+    refuelBtn.addEventListener('click', ()=>{
+      if(state.resources.bf >= 120 && state.justDocked){
+        state.resources.bf -= 120; state.revenue += 25000; state.justDocked = false;
+        toast('Visitor refueled (+$25,000, -120 biofuel)'); logEvent('Refueled visiting spacecraft (+$25,000).','MARKET');
+        updateBars(); updateValues(); refreshMarket();
+      }
+    });
+
+    // Science tooltips
+    resourcesPanel.addEventListener('mouseenter', (e)=>{
+      const r = e.target.closest('#co2-row');
+      if(r){
+        ttTitle.textContent = 'Bioreactor & Sabatier';
+        ttBody.innerHTML = 'Photosynthesis + Sabatier:<br/>CO₂ + 4H₂ → CH₄ + 2H₂O<br/>Electrolysis: 2H₂O → 2H₂ + O₂';
+        tt.style.left = '24px'; tt.style.top='240px'; tt.style.display='block';
+      }
+    }, true);
+    resourcesPanel.addEventListener('mouseleave',()=>{ tt.style.display='none'; });
+
+    // Hover & select
+    addEventListener('pointermove', e=>{ mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1; });
+    canvas.addEventListener('click', ()=>{ if(!hovered) return; setTarget(hovered); changePhase('CAPTURING'); });
+
+    // Start / Tour
+    function startSim(){
+      hero.style.opacity='0'; hero.style.pointerEvents='none'; setTimeout(()=>hero.remove(),350);
+      hud.style.opacity='1'; state.running=true; toast('Simulation initiated. Live data loading…');
+      logEvent('Orbital Oasis is now fully operational.','MISSION CONTROL');
+      fetchDONKI(); fetchEONET(); useCelesTrak();
+    }
+    startBtn.addEventListener('click', startSim);
+    startTourBtn.addEventListener('click', ()=>{
+      startSim();
+      // 3-step tour
+      setTimeout(()=>{ document.getElementById('weather-card').classList.add('tour-hl'); toast('This is live NASA space weather (DONKI).'); }, 600);
+      setTimeout(()=>{ document.getElementById('sources-panel').classList.add('tour-hl'); toast('Live TLEs from CelesTrak + NASA EONET events drive the sim.'); }, 2600);
+      setTimeout(()=>{ btnDock.classList.add('tour-hl'); toast('Dock to offload CO₂, then convert to O₂ + fuel.'); }, 4600);
+      setTimeout(()=>{ document.getElementById('weather-card').classList.remove('tour-hl'); document.getElementById('sources-panel').classList.remove('tour-hl'); btnDock.classList.remove('tour-hl'); }, 8600);
+    });
+
+    // Source toggles
+    btnCeles.addEventListener('click', useCelesTrak);
+    btnFallback.addEventListener('click', ()=>{ debrisGroup.clear(); fallbackTLEs.forEach(addTLEObject); markWarn(srcTLE,'Fallback'); state.tleMode='Fallback'; updated.textContent = new Date().toISOString().slice(0,10); toast('Using fallback TLE dataset'); logEvent('TLE source switched to Fallback.','DATA'); });
+
+    addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+    // Init
+    updated.textContent = new Date().toISOString().slice(0,10);
+    function updateFinanceLoop(){ updateMarketPrices(); updateValues(); setTimeout(updateFinanceLoop, 6000); }
+    updateFinanceLoop();
+    function refreshRefuelLoop(){ if(marketOverlay.style.display==='block') refreshMarket(); setTimeout(refreshRefuelLoop, 1500); }
+    refreshRefuelLoop();
+    updateBars(); updateValues(); animate();
+  </script>
+</body>
+</html>
